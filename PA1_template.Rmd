@@ -1,0 +1,177 @@
+---
+title: "Reproducible Research -- Peer Assessment 1"
+author: "Mohammad Anwar Sabri"
+date: "June 14, 2015"
+output: html_document
+---
+
+First of all, let's load the data from the CSV file in the working directory. The data must be loaded into the working directory. For this assignment, the data was loaded from the course web site:
+Dataset: Activity monitoring data: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip
+
+This is a zipped file. So, it must be unzipped to extract the data set. Then the following command will load this dataset into a data frame, d:
+
+```{r}
+d <- read.csv("activity.csv")
+```
+
+Make sure that the "dplyr" package is loaded into memory:
+
+```{r}
+library("dplyr")
+```
+
+Let's start our analysis of this dataset:
+
+##I. Mean Total Number of Steps Taken Per Day:
+
+###1. Aggregate the total number of steps taken per day for each day and rename the columns. Finally, show the first 6 and last 6 rows of data:
+
+```{r}
+d2 <- aggregate(d$steps ~ d$date, d, sum)
+names(d2) <- c("date", "steps")
+head(d2)
+tail(d2)
+```
+
+As we can see that there is no data for the first day (October 1, 2012) and the last day (November 30, 2012) in the data set. They're recorded as "NA" which are disregarded by the aggregate function.
+
+###2. A histogram shows the frequency of number of steps taken each day (in groups):
+
+```{r}
+d2hist <- hist(d2$steps, main = "Histogram of Total Steps Taken Each Day", 
+               xlab = "Steps Taken Per Day", ylab = "Number of Days", labels = T)
+```
+
+The number of steps taken per day is very close to a normal distribution, with the maximum number of steps between 10000 and 15000 for 28 days.
+
+###3. The Mean and Median of the total number of steps taken per day:
+
+```{r, echo = F}
+d2sumry <- summary(d2$steps)
+print(c("The MEDIAN number of Steps taken per day:", d2sumry[["Median"]]))
+print(c("The MEAN number of Steps taken per day:", d2sumry[[4]]))
+```
+
+##II. Average Daily Activity Pattern
+###1. Time Series Plot of the Average Steps Taken Over the 5-minute Intervals
+
+We need the lubridate package for formatting the date and time intervals into Date format.
+
+```{r}
+library("lubridate")
+d$datetime <- ymd(d$date) + hours(floor(d$interval / 100)) + minutes(d$interval %% 100)
+d3 <- aggregate(d$steps ~ d$interval, d, mean)
+names(d3) <- c("interval","steps")
+```
+
+Following is a time series plot fo the 5-minute interval (on x-asix) and the average number of steps taken, averaged across all days (on the y-axis):
+
+```{r}
+plot(d3, type = "l", main = "Average Number of Steps Taken in 5-minute Intervals", 
+    xlab = "5-minute Interval", ylab = "Number of Steps Taken")
+```
+
+###2. Maximum Number of Steps in a 5-minute Interval
+
+The 5-minute Interval that contains the maximum number of steps taken (206), on average across all the days in the dataset is interval # 104 (8:35 am to 8:40 am):
+
+```{r}
+d3[d3$steps == max(d3$steps),]
+```
+
+##III. Imputing Missing Values
+##1. Total Number of Missing Values in the Dataset
+
+The total number of missing values in the dataset (i.e., the total number of rows with NA's) is:
+
+```{r}
+d.na.1 <- d[is.na(d$steps) == T,]
+nrow(d.na.1)
+```
+
+There are 2304 rows or 8 days (or 2304 obs. / 288 obs. per day = 8 days) of data missing from the dataset.
+
+###2 -- 3. Strategy for Filling In the Missing Data
+
+I used the mean (average) of the number of steps taken for each missing interval as the "assumed" number of steps to fill in the missing number of steps for each interval per day. Following R script is used to calculate and fill in the missing data and created a new data set, d.na.filled:
+
+```{r}
+d.na.filled <- as.data.frame(ifelse(is.na(d[,1]), d3[,2], d[,1]))
+names(d.na.filled) = "steps"
+d.na.filled$date <- d$date
+d.na.filled$interval <- d$interval
+str(d.na.filled)
+```
+
+```{r}
+d5 <- aggregate(d.na.filled$steps ~ d.na.filled$date, d.na.filled, sum)
+names(d5) <- c("date", "steps")
+```
+
+###4. Histogram, Mean, and the Median of the Total Number of Steps Taken Each Day with NA's filled in: 
+
+```{r, echo = F}
+d5hist <- hist(d5$steps, main = "Histogram of Total Steps Taken Per Day (with NA's Replaced)", 
+    xlab = "Steps Taken Per Day", ylab = "Number of Days", labels = T)
+print("Summary Statistics with the NA's:")
+d2sumry
+d5sumry <- summary(d5$steps)
+print("Summary Statistics with the NA's Replaced with Mean:")
+d5sumry
+```
+
+####These values differ from the estimates from the first part of the assignment (without replacing the NA's) as follows:
+
+The Minimum, Maximum, and the Mean of the steps taken remain UNCHANGED. However, the Inter Quartile Range (IQR) of the steps taken per day has been reduced from 4449 (with NA's) to 2991 (with NA's replaced). This has also shifted the Median a tad higher.
+
+##IV. Differences in Activity Patterns Between Weekdays and Weekends
+###1. Creating A New Factor in the Dataset for the Type of Weekday. 
+
+For this purpose, I created a function, dayType(), to determine the type of the day:
+
+```{r}
+d.na.filled$datetime <- d$datetime
+d.na.filled$day <- weekdays(d$datetime)
+
+#funciton dayType
+dayType <- function(dt) {
+    wkday <- weekdays(dt)
+    if(wkday == "Saturday" | wkday == "Sunday")  dayType <- "weekend"
+    else(dayType <- "weekday")
+    return(dayType)
+}
+
+d.na.filled$dayFactor <- as.factor(sapply(d.na.filled$datetime, dayType))
+```
+
+Subsetting and aggregating data for plotting a histogram
+
+```{r}
+d.wkday <- subset(d.na.filled, d.na.filled$dayFactor == "weekday")
+d.wkday.agg <- aggregate(d.wkday$steps ~ d.wkday$interval, d.wkday, mean)
+names(d.wkday.agg) = c("interval", "steps")
+
+d.wkend <- subset(d.na.filled, d.na.filled$dayFactor == "weekend")
+d.wkend.agg <- aggregate(d.wkend$steps ~ d.wkend$interval, d.wkend, mean)
+names(d.wkend.agg) = c("interval", "steps")
+d6 <- data.frame(unique(d.na.filled$interval), d.wkday.agg$steps, d.wkend.agg$steps)
+names(d6) <- c("interval", "wkdaysteps", "wkendsteps")
+```
+
+###2. Time Series Plot for Weekdays and Weekends
+
+```{r}
+par(mfrow = c(2,1), mar = c(4, 4, 2, 1), oma = c(0, 0, 2, 0))
+with(d6, {
+  plot(d6$interval, d6$wkdaysteps, type = "l", 
+       main = "Weekday", 
+       xlab = "5-minute Interval", 
+       ylab = "Number of Steps Taken")
+  plot(d6$interval, d6$wkendsteps, type = "l", 
+       main = "Weekend", 
+       xlab = "5-minute Interval", 
+       ylab = "Number of Steps Taken")
+})
+```
+
+####As obvious from the two histograms, there are more steps taken throughout the day during the weekend compared to weekdays. It looks like the subject is more active, physically, during the weekends!
